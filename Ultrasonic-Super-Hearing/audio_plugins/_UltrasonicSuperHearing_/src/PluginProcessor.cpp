@@ -32,8 +32,14 @@ static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
     
     params.push_back(std::make_unique<juce::AudioParameterChoice>("pitchShift", "PitchShift",
-                                                                  juce::StringArray{"none","Down 1 Oct","Down 2 Oct","Down 3 Oct","Use CH7"}, 0,
+                                                                  juce::StringArray{"none","Down 1 Oct","Down 2 Oct","Down 3 Oct",
+                                                                                    "Down 4 Oct","Down 5 Oct","Use CH7"}, 0,
                                                                   AudioParameterChoiceAttributes().withAutomatable(false)));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "outputMode", "OutputMode",
+        juce::StringArray{"Binaural", "AmbiX 1st Order"},
+        0,   /* default: Binaural */
+        AudioParameterChoiceAttributes().withAutomatable(false)));
     return { params.begin(), params.end() };
 }
 
@@ -42,23 +48,31 @@ void PluginProcessor::parameterChanged(const juce::String& parameterID, float ne
     if (parameterID == "pitchShift"){
         ultrasoniclib_setPitchShiftOption(hUS, static_cast<ULTRASONICLIB_PITCHSHFT_OPTIONS>(newValue+1.001f));
     }
+    else if (parameterID == "outputMode") {
+        ultrasoniclib_setOutputMode(hUS,
+            newValue < 0.5f ? OUTPUTMODE_BINAURAL : OUTPUTMODE_AMBIX);
+    }
 }
 
 void PluginProcessor::setParameterValuesUsingInternalState()
 {
     setParameterValue("pitchShift", ultrasoniclib_getPitchShiftOption(hUS)-1);
+    setParameterValue("outputMode",
+        ultrasoniclib_getOutputMode(hUS) == OUTPUTMODE_AMBIX ? 1.0f : 0.0f);
 }
 
 void PluginProcessor::setInternalStateUsingParameterValues()
 {
     ultrasoniclib_setPitchShiftOption(hUS, static_cast<ULTRASONICLIB_PITCHSHFT_OPTIONS>(getParameterChoice("pitchShift")+1));
+    ultrasoniclib_setOutputMode(hUS,
+        getParameterChoice("outputMode") == 1 ? OUTPUTMODE_AMBIX : OUTPUTMODE_BINAURAL);
 }
 
 PluginProcessor::PluginProcessor()
     : PluginProcessorBase(
         BusesProperties()
             .withInput("Input", AudioChannelSet::discreteChannels(6), true)
-            .withOutput("Output", AudioChannelSet::discreteChannels(2), true),
+            .withOutput("Output", AudioChannelSet::discreteChannels(4), true),
         createParameterLayout())
 {
     nSampleRate = 0;
@@ -118,6 +132,7 @@ void PluginProcessor::getStateInformation (MemoryBlock& destData)
     xml->setAttribute("DOAAVERAGING", ultrasoniclib_getDoAaveragingCoeff(hUS));
     xml->setAttribute("POSTGAIN", ultrasoniclib_getPostGain_dB(hUS));
     xml->setAttribute("ENABLEDIFF", ultrasoniclib_getEnableDiffuseness(hUS));
+    xml->setAttribute("OUTPUTMODE", (int)ultrasoniclib_getOutputMode(hUS));
 
     /* Save */
     copyXmlToBinary(*xml, destData);
@@ -137,8 +152,11 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
                 ultrasoniclib_setPostGain_dB(hUS, (float)xmlState->getDoubleAttribute("POSTGAIN", 0.9f));
             if(xmlState->hasAttribute("ENABLEDIFF"))
                 ultrasoniclib_setEnableDiffuseness(hUS, xmlState->getIntAttribute("ENABLEDIFF", 0));
+            if(xmlState->hasAttribute("OUTPUTMODE"))
+                ultrasoniclib_setOutputMode(hUS,
+                    (ULTRASONICLIB_OUTPUT_MODE)xmlState->getIntAttribute("OUTPUTMODE", OUTPUTMODE_BINAURAL));
 
-            
+
             setParameterValuesUsingInternalState();
         }
         else if(xmlState->getIntAttribute("VersionCode")>=0x10001){
@@ -157,8 +175,11 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
                 ultrasoniclib_setPostGain_dB(hUS, (float)xmlState->getDoubleAttribute("POSTGAIN", 0.9f));
             if(xmlState->hasAttribute("ENABLEDIFF"))
                 ultrasoniclib_setEnableDiffuseness(hUS, xmlState->getIntAttribute("ENABLEDIFF", 0));
+            if(xmlState->hasAttribute("OUTPUTMODE"))
+                ultrasoniclib_setOutputMode(hUS,
+                    (ULTRASONICLIB_OUTPUT_MODE)xmlState->getIntAttribute("OUTPUTMODE", OUTPUTMODE_BINAURAL));
         }
-        
+
         ultrasoniclib_refreshParams(hUS);
     }
 }

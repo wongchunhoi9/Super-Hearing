@@ -203,6 +203,14 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     CBpitchShift->setBounds (98, 78, 112, 19);
 
+    CBoutputMode = std::make_unique<ComboBoxWithAttachment>(p.parameters, "outputMode");
+    addAndMakeVisible(CBoutputMode.get());
+    CBoutputMode->setEditableText(false);
+    CBoutputMode->setJustificationType(juce::Justification::centred);
+    CBoutputMode->addListener(this);
+    CBoutputMode->setBounds(98, 108, 196, 22);
+    CBoutputMode->setTooltip("Output format: Binaural (L/R) or AmbiX 1st order (W X Y Z)");
+
     s_DoAestimation.reset (new juce::Slider ("new slider"));
     addAndMakeVisible (s_DoAestimation.get());
     s_DoAestimation->setRange (0, 0.99, 0.01);
@@ -236,7 +244,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     tb_enableDiff->setBounds (440, 44, 32, 24);
 
-    setSize (500, 112);
+    setSize (500, 142);
 
     hUS = processor.getFXHandle();
 
@@ -274,6 +282,7 @@ void PluginEditor::paint (juce::Graphics& g)
     /* Panels */
     drawPanel(g, {10,40,476,32}, panelFill, panelStroke);
     drawPanel(g, {10,71,476,33}, panelFill, panelStroke);
+    drawPanel(g, {10,101,476,33}, panelFill, panelStroke);
 
     /* Title */
     drawLabel(g, {16,1,272,32}, "UltrasonicSuperHearing", 18.8f);
@@ -283,6 +292,23 @@ void PluginEditor::paint (juce::Graphics& g)
     drawLabel(g, {15,71,96,35},  "Pitch Shift:",   15.f);
     drawLabel(g, {232,72,144,30}, "Post Gain (dB)", 15.f);
     drawLabel(g, {319,40,144,30}, "Enable Diff:",   15.f);
+    drawLabel(g, {15,101,96,35}, "Output:",   15.f);
+
+    /* Output mode badge */
+    {
+        bool isAmbi = (ultrasoniclib_getOutputMode(hUS) == OUTPUTMODE_AMBIX);
+        juce::Rectangle<float> badge { 310.f, 105.f, 170.f, 24.f };
+        g.setColour(isAmbi ? accentCyan.withAlpha(0.18f)
+                           : accentOrange.withAlpha(0.18f));
+        g.fillRoundedRectangle(badge, 4.f);
+        g.setColour(isAmbi ? accentCyan : accentOrange);
+        g.drawRoundedRectangle(badge, 4.f, 1.f);
+        drawLabel(g, badge.toNearestInt(),
+                  isAmbi ? "W  X  Y  Z   (4ch AmbiX)" : "L  R   (2ch Binaural)",
+                  12.5f, juce::Justification::centred,
+                  isAmbi ? accentCyan : accentOrange,
+                  juce::Font::plain);
+    }
 
     /* display version/date built */
     g.setColour(Colours::white);
@@ -390,4 +416,7 @@ void PluginEditor::timerCallback()
         currentWarning = k_warning_none;
         repaint(0,0,getWidth(),32);
     }
+
+    /* refresh output mode row (badge tracks live output mode changes) */
+    repaint(10, 101, 476, 33);
 }

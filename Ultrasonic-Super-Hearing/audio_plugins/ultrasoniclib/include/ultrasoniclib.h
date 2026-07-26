@@ -44,12 +44,20 @@ typedef enum _ULTRASONICLIB_PITCHSHFT_OPTIONS{
     ULTRASONICLIB_PITCHSHFT_DOWN_1_OCT,
     ULTRASONICLIB_PITCHSHFT_DOWN_2_OCT,
     ULTRASONICLIB_PITCHSHFT_DOWN_3_OCT,
+    ULTRASONICLIB_PITCHSHFT_DOWN_4_OCT,
+    ULTRASONICLIB_PITCHSHFT_DOWN_5_OCT,
     ULTRASONICLIB_PITCHSHFT_USE_CHANNEL_7
 
 }ULTRASONICLIB_PITCHSHFT_OPTIONS;
 
 /** Number of available pitch shifting options */
-#define ULTRASONICLIB_MUM_PITCHSHFT_OPTIONS ( 5 )
+#define ULTRASONICLIB_MUM_PITCHSHFT_OPTIONS ( 7 )
+
+/** Output mode */
+typedef enum {
+    OUTPUTMODE_BINAURAL = 1,   /* 2-ch HRTF binaural (original) */
+    OUTPUTMODE_AMBIX    = 2    /* 4-ch 1st-order AmbiX ACN/SN3D  */
+} ULTRASONICLIB_OUTPUT_MODE;
 
 /** Current status of the codec. */
 typedef enum _ULTRASONICLIB_CODEC_STATUS {
@@ -149,6 +157,9 @@ void ultrasoniclib_setPostGain_dB(void* const hUS, float newValue);
  */
 void ultrasoniclib_setEnableDiffuseness(void* const hUS, int newState);
 
+/** Sets the output mode (see ULTRASONICLIB_OUTPUT_MODE enum) */
+void ultrasoniclib_setOutputMode(void* const hUS, ULTRASONICLIB_OUTPUT_MODE newMode);
+
 
 /* ========================================================================== */
 /*                                Get Functions                               */
@@ -187,7 +198,10 @@ ULTRASONICLIB_PITCHSHFT_OPTIONS ultrasoniclib_getPitchShiftOption(void* const hU
 /** Returns the number of channels required by the current configuration */
 int ultrasoniclib_getNInputCHrequired(void* const hUS);
 
-/** Returns the number of channels required by the current configuration */
+/**
+ * Returns the number of output channels required by the current
+ * configuration (always 4: host sees 4 pins regardless of output mode)
+ */
 int ultrasoniclib_getNOutputCHrequired(void* const hUS);
 
 /** Returns the DAW/Host sample rate */
@@ -201,6 +215,9 @@ float ultrasoniclib_getPostGain_dB(void* const hUS);
 
 /** Returns whether the diffuseness values are being used to "duck" the output*/
 int ultrasoniclib_getEnableDiffuseness(void* const hUS);
+
+/** Returns the output mode (see ULTRASONICLIB_OUTPUT_MODE enum) */
+ULTRASONICLIB_OUTPUT_MODE ultrasoniclib_getOutputMode(void* const hUS);
     
     
 #ifdef __cplusplus

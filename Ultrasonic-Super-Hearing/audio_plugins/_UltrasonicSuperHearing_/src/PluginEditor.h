@@ -67,6 +67,7 @@ private:
     HyperlinkButton publicationLink { "(Related Publication)", { "https://leomccormack.github.io/sparta-site/docs/help/related-publications/pulkki2021superhuman.pdf" } };
 
     std::unique_ptr<ComboBoxWithAttachment> CBpitchShift;
+    std::unique_ptr<ComboBoxWithAttachment> CBoutputMode;
     std::unique_ptr<juce::Slider> s_DoAestimation;
     std::unique_ptr<juce::Slider> s_postGain_dB;
     std::unique_ptr<juce::ToggleButton> tb_enableDiff;

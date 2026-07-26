@@ -52,6 +52,7 @@ void ultrasoniclib_create
     pData->doaAveragingCoeff = 0.9f;
     pData->postGain_dB = 0.0f;
     pData->enableDiff = 0;
+    pData->output_mode = OUTPUTMODE_BINAURAL;
 
     /* internals */
     pData->hSmb = NULL;
@@ -62,15 +63,15 @@ void ultrasoniclib_create
 
     /* create filterbank */
 #ifdef USE_QMF_FILTERBANK
-    qmf_create(&(pData->hQMF), ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, NUM_EARS, HOP_SIZE, 0, QMF_BANDS_CH_TIME);
+    qmf_create(&(pData->hQMF), ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, NUM_SH_SIGNALS, HOP_SIZE, 0, QMF_BANDS_CH_TIME);
 #else
-    afSTFT_create(&(pData->hSTFT), ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, NUM_EARS, HOP_SIZE, 0, 0, AFSTFT_BANDS_CH_TIME);
+    afSTFT_create(&(pData->hSTFT), ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, NUM_SH_SIGNALS, HOP_SIZE, 0, 0, AFSTFT_BANDS_CH_TIME);
 #endif
     pData->pressure = malloc1d(FRAME_SIZE*sizeof(float));
     pData->dataTD = (float**)malloc2d(ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, FRAME_SIZE, sizeof(float));
-    pData->binDataTD = (float**)malloc2d(NUM_EARS, FRAME_SIZE, sizeof(float));
+    pData->binDataTD = (float**)malloc2d(NUM_SH_SIGNALS, FRAME_SIZE, sizeof(float));
     pData->dataFD = (float_complex***)malloc3d(NBANDS_ANA, ULTRASONICLIB_NUM_INPUT_CHANNELS+1/* pitch shifted channel */, TIME_SLOTS, sizeof(float_complex));
-    pData->binDataFD = (float_complex***)malloc3d(NBANDS_ANA, NUM_EARS, TIME_SLOTS, sizeof(float_complex));
+    pData->binDataFD = (float_complex***)malloc3d(NBANDS_ANA, NUM_SH_SIGNALS, TIME_SLOTS, sizeof(float_complex));
  
     /* hrir data */
     pData->useDefaultHRIRsFLAG=1;
@@ -277,7 +278,7 @@ void ultrasoniclib_process
 )
 {
     ultrasoniclib_data *pData = (ultrasoniclib_data*)(hUS);
-    int ch, ear, band, t, band_count, enableDiff;
+    int ch, ear, band, t, band_count, enableDiff, sh;
     float postGainLIN;
     float abs_sig[ULTRASONICLIB_NUM_INPUT_CHANNELS], abs_sig_xyz[ULTRASONICLIB_NUM_INPUT_CHANNELS][3];
     float doa_deg[2], doa_xyz[3];
@@ -374,36 +375,54 @@ void ultrasoniclib_process
         else
             diff = 0.0f;
 
-        /* Binauralise the pitch shifted channel (7) in the estimated DoA */
-        memset(FLATTEN3D(pData->binDataFD), 0, NBANDS_ANA*NUM_EARS*TIME_SLOTS * sizeof(float_complex));
-        for (band = 0; band < NBANDS_SYN; band++){
-
-            /* Only binauralise pitch shifted signals above the new human threshold of hearing */
-            if( ( pData->freqVector_syn[band] >= pData->pitchShift_factor*HUMAN_HEARING_MAX_FREQ) ){
-                /* Interpolate HRTF based on estimated DoA for this bin */
-                unitCart2sph(doa_xyz, 1, 1, doa_deg);
-                ultrasoniclib_interpHRTFs(hUS, doa_deg[0], doa_deg[1], band, pData->hrtf_interp[band]);
-
-                /* Binauralise pitch shifted channel */
-                for (ear = 0; ear < NUM_EARS; ear++)
-                    for (t = 0; t < TIME_SLOTS; t++)
-                        pData->binDataFD[band][ear][t] = crmulf(ccaddf(pData->binDataFD[band][ear][t],
-                                                                       ccmulf(pData->dataFD[band][6][t], pData->hrtf_interp[band][ear])), (1.0-diff));
+        /* Synthesise in estimated DoA — mode-dependent */
+        memset(FLATTEN3D(pData->binDataFD), 0, NBANDS_ANA*NUM_SH_SIGNALS*TIME_SLOTS*sizeof(float_complex));
+        if (pData->output_mode == OUTPUTMODE_AMBIX) {
+            /* --- AmbiX 1st-order ACN/SN3D encoding ---
+               doa_xyz is already a unit vector (or close to it after averaging).
+               SN3D gains: W=1, X=√3·x, Y=√3·y, Z=√3·z  (SAF convention: x=fwd, y=left, z=up) */
+            float shGains[NUM_SH_SIGNALS];
+            shGains[0] = 1.0f;
+            shGains[1] = SQRT3 * doa_xyz[0];   /* X — ACN 1 */
+            shGains[2] = SQRT3 * doa_xyz[1];   /* Y — ACN 2 */
+            shGains[3] = SQRT3 * doa_xyz[2];   /* Z — ACN 3 */
+            for (band = 0; band < NBANDS_SYN; band++) {
+                if (pData->freqVector_syn[band] >= pData->pitchShift_factor * HUMAN_HEARING_MAX_FREQ) {
+                    for (sh = 0; sh < NUM_SH_SIGNALS; sh++)
+                        for (t = 0; t < TIME_SLOTS; t++)
+                            pData->binDataFD[band][sh][t] =
+                                crmulf(ccmulf(pData->dataFD[band][6][t],
+                                              cmplxf(shGains[sh], 0.0f)),
+                                       (1.0f - diff));
+                }
             }
-            else
-                memset(FLATTEN2D(pData->binDataFD[band]), 0, NUM_EARS*TIME_SLOTS*sizeof(float_complex));
-        } 
+        }
+        else { /* OUTPUTMODE_BINAURAL — original HRTF path, writes only to indices 0 and 1 */
+            for (band = 0; band < NBANDS_SYN; band++) {
+                if (pData->freqVector_syn[band] >= pData->pitchShift_factor * HUMAN_HEARING_MAX_FREQ) {
+                    unitCart2sph(doa_xyz, 1, 1, doa_deg);
+                    ultrasoniclib_interpHRTFs(hUS, doa_deg[0], doa_deg[1], band, pData->hrtf_interp[band]);
+                    for (ear = 0; ear < NUM_EARS; ear++)
+                        for (t = 0; t < TIME_SLOTS; t++)
+                            pData->binDataFD[band][ear][t] =
+                                crmulf(ccaddf(pData->binDataFD[band][ear][t],
+                                              ccmulf(pData->dataFD[band][6][t],
+                                                     pData->hrtf_interp[band][ear])),
+                                       (1.0f - diff));
+                }
+            }
+        }
 
-        /* Backward- time-frequency transform */
+        /* Backward- time-frequency transform (always NUM_SH_SIGNALS channels) */
 #ifdef USE_QMF_FILTERBANK
         qmf_synthesis(pData->hQMF, pData->binDataFD, FRAME_SIZE, pData->binDataTD);
 #else
         afSTFT_backward(pData->hSTFT, pData->binDataFD, FRAME_SIZE, pData->binDataTD);
 #endif
-        cblas_sscal(NUM_EARS*FRAME_SIZE, postGainLIN, FLATTEN2D(pData->binDataTD), 1);
+        cblas_sscal(NUM_SH_SIGNALS*FRAME_SIZE, postGainLIN, FLATTEN2D(pData->binDataTD), 1);
 
-        /* Copy output frame */
-        for(ch=0; ch<SAF_MIN(NUM_EARS,nOutputs); ch++)
+        /* Copy output frame — all NUM_SH_SIGNALS channels */
+        for(ch=0; ch<SAF_MIN(NUM_SH_SIGNALS,nOutputs); ch++)
             memcpy(outputs[ch], pData->binDataTD[ch], FRAME_SIZE*sizeof(float));
         for(; ch<nOutputs; ch++)
             memset(outputs[ch], 0, FRAME_SIZE*sizeof(float));
@@ -430,6 +449,8 @@ void ultrasoniclib_setPitchShiftOption(void* const hUS, ULTRASONICLIB_PITCHSHFT_
         case ULTRASONICLIB_PITCHSHFT_DOWN_1_OCT: pData->pitchShift_factor = 0.5f; break;
         case ULTRASONICLIB_PITCHSHFT_DOWN_2_OCT: pData->pitchShift_factor = 0.25f; break;
         case ULTRASONICLIB_PITCHSHFT_DOWN_3_OCT: pData->pitchShift_factor = 0.125f; break;
+        case ULTRASONICLIB_PITCHSHFT_DOWN_4_OCT: pData->pitchShift_factor = 0.0625f;   break;
+        case ULTRASONICLIB_PITCHSHFT_DOWN_5_OCT: pData->pitchShift_factor = 0.03125f;  break;
         case ULTRASONICLIB_PITCHSHFT_USE_CHANNEL_7: break;
     }
 }
@@ -450,6 +471,12 @@ void ultrasoniclib_setEnableDiffuseness(void* const hUS, int newState)
 {
     ultrasoniclib_data *pData = (ultrasoniclib_data*)(hUS);
     pData->enableDiff = newState;
+}
+
+void ultrasoniclib_setOutputMode(void* const hUS, ULTRASONICLIB_OUTPUT_MODE newMode)
+{
+    ultrasoniclib_data *pData = (ultrasoniclib_data*)(hUS);
+    pData->output_mode = newMode;
 }
 
 
@@ -499,7 +526,7 @@ int ultrasoniclib_getNInputCHrequired(void* const hUS)
 int ultrasoniclib_getNOutputCHrequired(void* const hUS)
 {
     (void)hUS;
-    return NUM_EARS;
+    return NUM_SH_SIGNALS;   /* always 4 — host sees 4 pins regardless of mode */
 }
 
 int ultrasoniclib_getDAWsamplerate(void* const hUS)
@@ -524,4 +551,10 @@ int ultrasoniclib_getEnableDiffuseness(void* const hUS)
 {
     ultrasoniclib_data *pData = (ultrasoniclib_data*)(hUS);
     return pData->enableDiff;
+}
+
+ULTRASONICLIB_OUTPUT_MODE ultrasoniclib_getOutputMode(void* const hUS)
+{
+    ultrasoniclib_data *pData = (ultrasoniclib_data*)(hUS);
+    return pData->output_mode;
 }

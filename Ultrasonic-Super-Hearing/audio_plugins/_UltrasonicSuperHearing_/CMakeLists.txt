@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.15)
 
-project(UltrasonicSuperHearing VERSION 1.0.3)
+project(UltrasonicSuperHearing VERSION 1.1.0)
 message(STATUS "  ${PROJECT_NAME}")
 
 # juce helper function to create a library, which is configured as a JUCE plugin
@@ -14,10 +14,10 @@ juce_add_plugin(${PROJECT_NAME}
     IS_MIDI_EFFECT              FALSE                       
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE           
     COPY_PLUGIN_AFTER_BUILD     TRUE     # Where does this go in Windows + Linux?
-    PLUGIN_MANUFACTURER_CODE    LEOM                
-    PLUGIN_CODE                 BATM                     
+    PLUGIN_MANUFACTURER_CODE    LEOM
+    PLUGIN_CODE                 BATA
     FORMATS                     ${BUILD_PLUGIN_FORMATS}       # ( VST AAX Unity VST3 AU AUv3 Standalone )
-    PRODUCT_NAME                "${PROJECT_NAME}"
+    PRODUCT_NAME                "USH-AmbiX"
     LV2URI                      "http://AALTO.${PROJECT_NAME}.${PROJECT_VERSION}"
     VST3_CATEGORIES             Spatial
     AAX_CATEGORY                SoundField

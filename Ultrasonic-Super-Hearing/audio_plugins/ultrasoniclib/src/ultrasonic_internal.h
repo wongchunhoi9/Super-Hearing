@@ -47,6 +47,9 @@ extern "C" {
 
 #define USE_QMF_FILTERBANK_DISABLED
 
+#define NUM_SH_SIGNALS  (4)
+#define SQRT3           (1.7320508075688772f)
+
 #ifndef FRAME_SIZE
 # define FRAME_SIZE ( 512 )
 #endif
@@ -102,9 +105,9 @@ typedef struct _ultrasoniclib
 #endif
     float* pressure;                  /**< pressure signal; #FRAME_SIZE x 1 */
     float** dataTD;                   /**< Input time-domain microphone array signals; #ULTRASONICLIB_NUM_INPUT_CHANNELS x #FRAME_SIZE */
-    float** binDataTD;                /**< Output time-domain binaural signals; #NUM_EARS x #FRAME_SIZE */
+    float** binDataTD;                /**< Output time-domain signals (binaural or AmbiX); #NUM_SH_SIGNALS x #FRAME_SIZE */
     float_complex*** dataFD;          /**< Input time-frequency-domain microphone array signals; #NBANDS_ANA x #ULTRASONICLIB_NUM_INPUT_CHANNELS x #TIME_SLOTS */
-    float_complex*** binDataFD;       /**< Output time-frequency-domain binaural signals; #NBANDS_SYN x #NUM_EARS x #TIME_SLOTS */
+    float_complex*** binDataFD;       /**< Output time-frequency-domain signals (binaural or AmbiX); #NBANDS_SYN x #NUM_SH_SIGNALS x #TIME_SLOTS */
     float sampleRate;                 /**< Current host sampling rate */
 
     /* DoA estimation */
@@ -144,7 +147,8 @@ typedef struct _ultrasoniclib
     _Atomic_FLOAT32 doaAveragingCoeff;         /**< Averaging coefficient (1-pole filter) for averaging the DoA estimates over time */
     _Atomic_FLOAT32 postGain_dB;               /**< Gain to be applied to the output signals, in decibels */
     _Atomic_INT32 enableDiff;                  /**< 1: enable the amplitude "ducking" based on the diffuseness parameter, 0: disabled */
-    
+    ULTRASONICLIB_OUTPUT_MODE output_mode;     /**< see #ULTRASONICLIB_OUTPUT_MODE */
+
 } ultrasoniclib_data;
 
 

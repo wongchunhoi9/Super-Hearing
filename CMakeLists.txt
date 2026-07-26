@@ -45,12 +45,14 @@ option(SAF_BUILD_TESTS    "Build SAF unit tests." OFF)
 option(SAF_BUILD_EXAMPLES "Build SAF examples."   OFF)
 
 # Add JUCE, Spatial_Audio_Framework, and VST2_SDK to the project
-add_subdirectory(externals) 
-juce_set_vst2_sdk_path(${CMAKE_CURRENT_SOURCE_DIR}/externals/VST2_SDK)
+add_subdirectory(externals)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/externals/VST2_SDK")
+    juce_set_vst2_sdk_path(${CMAKE_CURRENT_SOURCE_DIR}/externals/VST2_SDK)
+endif()
 
 # Add folders containing plugins to build
-option(BUILD_PLUGIN_FORMAT_VST2 "Build VST2 plugins" ON)
-option(BUILD_PLUGIN_FORMAT_VST3 "Build VST3 plugins" OFF)
+option(BUILD_PLUGIN_FORMAT_VST2 "Build VST2 plugins" OFF)
+option(BUILD_PLUGIN_FORMAT_VST3 "Build VST3 plugins" ON)
 option(BUILD_PLUGIN_FORMAT_AU   "Build AU plugins"   OFF)
 option(BUILD_PLUGIN_FORMAT_LV2  "Build LV2 plugins"  OFF)
 option(BUILD_PLUGIN_FORMAT_AAX  "Build AAX plugins"  OFF)
